@@ -1,5 +1,6 @@
 ﻿namespace DocumentStore
 
+open System
 module Agents =
     open Core
     open System.Threading
@@ -15,7 +16,7 @@ module Agents =
         let initialContext: Indexer.Context = {
             Indexer.emptyContext with
                 Config = { IndexDirectory = "Index";
-                           DocumentsDirectory = "F:/Books"; } }
+                           DocumentsDirectory = "/Data/Books"; } }
 
         let rec loop(ctx) = async {
             let! msg = inbox.Receive()
@@ -24,10 +25,14 @@ module Agents =
                 match msg with
                     | Stop -> stopIndexer(ctx)
                     | RebuildIndex ->
-                        FileWalker.traverse
-                            ctx.Config.DocumentsDirectory
-                            (Indexer.storeDocument ctx)
-                        Indexer.commit ctx
+                        try
+                            FileWalker.traverse
+                                ctx.Config.DocumentsDirectory
+                                (Indexer.storeDocument ctx)
+                            Indexer.commit ctx
+                        with
+                            | ex -> printfn "DocumentStore.RebuildIndex: %A" ex.Message
+
                         ctx
                     | Start -> Indexer.initialize(ctx.Config)
                     // | _ -> ctx

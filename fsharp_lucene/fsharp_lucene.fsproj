@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="Core.fs" />
     <Compile Include="FileUtils.fs" />
+    <Compile Include="Pdf.fs" />
     <Compile Include="FileWalker.fs" />
     <Compile Include="Indexer.fs" />
     <Compile Include="DocumentStore.fs" />
@@ -15,8 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="iText7" Version="7.1.2" />
     <PackageReference Include="Lucene.Net" Version="4.8.0-beta00005" />
     <PackageReference Include="Lucene.Net.Analysis.Common" Version="4.8.0-beta00005" />
+    <PackageReference Include="Mime" Version="3.0.0" />
   </ItemGroup>
 
 </Project>
