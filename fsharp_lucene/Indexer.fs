@@ -63,6 +63,8 @@ module Indexer =
         let filename = fileName(filepath)
 
         if not (documentExists ctx filepath) then
+            printfn "Indexer.storeDocument: %A" filename
+
             let content = if PDF.isPdf filepath then PDF.getPdfContent(filepath) else ""
 
             let doc = new Document()
@@ -70,8 +72,6 @@ module Indexer =
             doc.Add(new StringField("Name", filename, Field.Store.YES))
             doc.Add(new TextField("Content", content, Field.Store.YES))
             // doc.Add(new Field("Content", content, Field.Store.YES, Field.Index.ANALYZED))
-
-            printfn "Indexer.storeDocument: %A" filename
 
             ctx.Indexer |> Option.iter (fun w -> w.AddDocument doc)
 
@@ -85,6 +85,17 @@ module Indexer =
                     writer.Commit()
                 | _ -> ()
 
+    let search (ctx: Context) (term: string) =
+        let q = new TermQuery(new Term("Content", term))
+        let res = ctx.Searcher.Value.Search(q, 10)
+        printfn "Results: %i" res.TotalHits
+        Array.iter (fun (scoreDoc: ScoreDoc) ->
+                        let doc = ctx.Searcher.Value.Doc(scoreDoc.Doc)
+                        let nameField = doc.GetField("Name")
+                        let pathField = doc.GetField("Path")
+                        printfn "%s: %s" (nameField.GetStringValue()) (pathField.GetStringValue()))
+                    res.ScoreDocs
+
     let initialize (config: Core.Config) =
         let dir = FSDirectory.Open(config.IndexDirectory)
         let analyzer = new StandardAnalyzer(luceneVersion)
@@ -95,9 +106,11 @@ module Indexer =
 
         let searcher = new IndexSearcher(DirectoryReader.Open(dir))
 
-        let ctx = { Indexer = Some indexer; Directory = Some dir; Searcher = Some searcher; Config = config; }
+        { Indexer = Some indexer; Directory = Some dir; Searcher = Some searcher; Config = config; }
 
-        printfn "Indexer.initialize: %A" config
+    let watch (ctx: Context) =
+        let config = ctx.Config
+        printfn "Indexer.watch: %A" config
 
         FileWalker.watchForNewFiles
             config.DocumentsDirectory

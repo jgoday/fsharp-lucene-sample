@@ -12,6 +12,7 @@ module PDF =
 
     let getPdfContent (filepath: string) =
         try
+            printfn "PDF.getPdfContent(%s)" filepath
             let buffer = new StringBuilder()
             let reader = new PdfReader(filepath)
             let doc = new PdfDocument(reader)
