@@ -1,6 +1,6 @@
 ﻿namespace DocumentStore
 
-open System
+
 module Agents =
     open Core
     open System.Threading
@@ -38,10 +38,9 @@ module Agents =
                             FileWalker.traverse
                                 ctx.Config.DocumentsDirectory
                                 (Indexer.storeDocument ctx)
-                            Indexer.commit ctx
                         with
                             | ex -> printfn "DocumentStore.RebuildIndex: %A" ex.Message
-                        printfn "DocumentStore.RebuildIndex: FINISHED"
+
                         ctx
                     | Watch ->
                         Indexer.watch ctx

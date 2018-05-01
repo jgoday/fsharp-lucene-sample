@@ -10,17 +10,22 @@ module Indexer =
     open Lucene.Net.Search
 
     open FileUtils
+    open RoutedAgent
+
+    let private ConcurrentExtractorsLimit = 10
+
+    type ExtractAndStoreMessage<'a> = {
+        Context: 'a;
+        FilePath: string;
+    }
+
 
     type Context = {
         Indexer: Option<IndexWriter>;
         Directory: Option<FSDirectory>;
         Searcher: Option<IndexSearcher>;
         Config: Core.Config;
-    }
-
-    let emptyContext = {
-        Indexer = None; Directory = None; Searcher = None;
-        Config = Core.defaultConfig
+        ExtractorAgent: MailboxProcessor<ExtractAndStoreMessage<Context>>
     }
 
     let private matchDocumentQuery (filepath: string) =
@@ -59,21 +64,29 @@ module Indexer =
                     if res.TotalHits = 1 then Some(res.ScoreDocs.[0]) else None)
             |> Option.flatten
 
+    let private extractAndStoreDocument msg =
+        match msg with
+            | { ExtractAndStoreMessage.Context = ctx; ExtractAndStoreMessage.FilePath = filepath } ->
+                let filename = fileName(filepath)
+                if not (documentExists ctx filepath) then
+                    printfn "Indexer.storeDocument: %A" filename
+
+                    let content = if PDF.isPdf filepath then PDF.getPdfContent(filepath) else ""
+
+                    let doc = new Document()
+                    doc.Add(new StringField("Path", filepath, Field.Store.YES))
+                    doc.Add(new StringField("Name", filename, Field.Store.YES))
+                    doc.Add(new TextField("Content", content, Field.Store.YES))
+
+                    ctx.Indexer |> Option.iter (fun w ->
+                        w.AddDocument doc
+                        w.Commit())
+
     let storeDocument (ctx: Context) (filepath: string) =
-        let filename = fileName(filepath)
-
-        if not (documentExists ctx filepath) then
-            printfn "Indexer.storeDocument: %A" filename
-
-            let content = if PDF.isPdf filepath then PDF.getPdfContent(filepath) else ""
-
-            let doc = new Document()
-            doc.Add(new StringField("Path", filepath, Field.Store.YES))
-            doc.Add(new StringField("Name", filename, Field.Store.YES))
-            doc.Add(new TextField("Content", content, Field.Store.YES))
-            // doc.Add(new Field("Content", content, Field.Store.YES, Field.Index.ANALYZED))
-
-            ctx.Indexer |> Option.iter (fun w -> w.AddDocument doc)
+        ctx.ExtractorAgent.Post {
+            Context = ctx;
+            FilePath = filepath;
+        }
 
     let removeDocument (ctx: Context) (filepath: string) =
         if documentExists ctx filepath then
@@ -106,7 +119,11 @@ module Indexer =
 
         let searcher = new IndexSearcher(DirectoryReader.Open(dir))
 
-        { Indexer = Some indexer; Directory = Some dir; Searcher = Some searcher; Config = config; }
+        { Indexer = Some indexer;
+          Directory = Some dir;
+          Searcher = Some searcher;
+          Config = config;
+          ExtractorAgent = RoutedAgent.create extractAndStoreDocument ConcurrentExtractorsLimit }
 
     let watch (ctx: Context) =
         let config = ctx.Config
@@ -118,3 +135,9 @@ module Indexer =
             (fun p -> removeDocument ctx p)
 
         ctx
+
+    let emptyContext = {
+        Indexer = None; Directory = None; Searcher = None;
+        Config = Core.defaultConfig;
+        ExtractorAgent = RoutedAgent.create extractAndStoreDocument ConcurrentExtractorsLimit
+    }
