@@ -20,8 +20,7 @@ module Agents =
     let private agent = MailboxProcessor<Message>.Start(fun inbox ->
         let initialContext: Indexer.Context = {
             Indexer.emptyContext with
-                Config = { IndexDirectory = "Index";
-                           DocumentsDirectory = "/Data"; } }
+                Config = Core.defaultConfig }
 
         let rec loop(ctx) = async {
             let! msg = inbox.Receive()

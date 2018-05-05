@@ -6,6 +6,7 @@ module Core =
     type Config = {
         IndexDirectory: string;
         DocumentsDirectory: string;
+        ConcurrentExtractors: int;
     }
 
     type ProgramArguments =
@@ -13,6 +14,7 @@ module Core =
         | Index_Directory of path: string
         | Rebuild
         | Watch
+        | Concurrent_Extractors of concurrentNumber: int
         | Search of term: string
     with
         interface IArgParserTemplate with
@@ -22,6 +24,7 @@ module Core =
                 | Index_Directory _ -> "directory of lucene's index."
                 | Rebuild -> "rebuilds all the index."
                 | Watch -> "watch for new documents."
+                | Concurrent_Extractors _ -> "Number of concurrent extractors."
                 | Search _ -> "search documents by content."
 
-    let defaultConfig = { IndexDirectory = ""; DocumentsDirectory = "" }
+    let defaultConfig = { IndexDirectory = ""; DocumentsDirectory = ""; ConcurrentExtractors = 5; }

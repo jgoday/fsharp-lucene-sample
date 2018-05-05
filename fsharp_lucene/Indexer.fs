@@ -8,24 +8,22 @@ module Indexer =
     open Lucene.Net.Store
     open Lucene.Net.Util
     open Lucene.Net.Search
+    open Lucene.Net.QueryParsers.Classic
+    open Lucene.Net.Search.Highlight
 
     open FileUtils
-    open RoutedAgent
-
-    let private ConcurrentExtractorsLimit = 10
 
     type ExtractAndStoreMessage<'a> = {
         Context: 'a;
         FilePath: string;
     }
 
-
     type Context = {
-        Indexer: Option<IndexWriter>;
-        Directory: Option<FSDirectory>;
-        Searcher: Option<IndexSearcher>;
+        Indexer: IndexWriter option;
+        Directory: FSDirectory option;
+        Searcher: IndexSearcher option;
         Config: Core.Config;
-        ExtractorAgent: MailboxProcessor<ExtractAndStoreMessage<Context>>
+        ExtractorAgent: MailboxProcessor<ExtractAndStoreMessage<Context>> option;
     }
 
     let private matchDocumentQuery (filepath: string) =
@@ -34,6 +32,7 @@ module Indexer =
         q
 
     let luceneVersion = LuceneVersion.LUCENE_48
+    let searchMaxDocuments = 10
 
     let close (ctx: Context) =
         ctx.Directory
@@ -83,10 +82,8 @@ module Indexer =
                         w.Commit())
 
     let storeDocument (ctx: Context) (filepath: string) =
-        ctx.ExtractorAgent.Post {
-            Context = ctx;
-            FilePath = filepath;
-        }
+        ctx.ExtractorAgent
+            |> Option.iter (fun ex -> ex.Post { Context = ctx; FilePath = filepath; })
 
     let removeDocument (ctx: Context) (filepath: string) =
         if documentExists ctx filepath then
@@ -99,21 +96,38 @@ module Indexer =
                 | _ -> ()
 
     let search (ctx: Context) (term: string) =
-        let q = new TermQuery(new Term("Content", term))
-        let res = ctx.Searcher.Value.Search(q, 10)
-        printfn "Results: %i" res.TotalHits
-        Array.iter (fun (scoreDoc: ScoreDoc) ->
-                        let doc = ctx.Searcher.Value.Doc(scoreDoc.Doc)
-                        let nameField = doc.GetField("Name")
-                        let pathField = doc.GetField("Path")
-                        printfn "%s: %s" (nameField.GetStringValue()) (pathField.GetStringValue()))
-                    res.ScoreDocs
+        let analyzer = new StandardAnalyzer(luceneVersion)
+        let queryParser = new QueryParser(luceneVersion, "Content", analyzer)
+        queryParser.DefaultOperator <- QueryParser.AND_OPERATOR;
+                
+        let query = queryParser.Parse(term)
+        let scorer = new QueryScorer(query, "Content")
+
+        let highlighter = new Highlighter(scorer)
+        
+        ctx.Searcher |>
+            Option.iter (fun searcher ->
+                let res = searcher.Search(query, searchMaxDocuments)
+                printfn "Results: %i" res.TotalHits
+                Array.iter (fun (scoreDoc: ScoreDoc) ->
+                                let doc = ctx.Searcher.Value.Doc(scoreDoc.Doc)
+                                let name = doc.GetField("Name").GetStringValue()
+                                let path = doc.GetField("Path").GetStringValue()
+                                let content = doc.GetField("Content").GetStringValue()
+                                let fragment = highlighter.GetBestFragment(analyzer,
+                                                                           "Content",
+                                                                           content)
+                                printfn "-------------------------------"
+                                printfn "Name: %s" name
+                                printfn "Path: %s" path
+                                printfn "%s" fragment
+                                printfn "-------------------------------")
+                            res.ScoreDocs)
 
     let initialize (config: Core.Config) =
         let dir = FSDirectory.Open(config.IndexDirectory)
         let analyzer = new StandardAnalyzer(luceneVersion)
         let indexConfig = new IndexWriterConfig(luceneVersion, analyzer)
-        // analyzer.MaxTokenLength <- UNLIMITED
         let indexer = new IndexWriter(dir, indexConfig)
         indexer.Commit() // makes sures that the index structure exists before we create the searcher
 
@@ -123,7 +137,8 @@ module Indexer =
           Directory = Some dir;
           Searcher = Some searcher;
           Config = config;
-          ExtractorAgent = RoutedAgent.create extractAndStoreDocument ConcurrentExtractorsLimit }
+          ExtractorAgent = Some (RoutedAgent.create extractAndStoreDocument
+                                                    config.ConcurrentExtractors) }
 
     let watch (ctx: Context) =
         let config = ctx.Config
@@ -137,7 +152,9 @@ module Indexer =
         ctx
 
     let emptyContext = {
-        Indexer = None; Directory = None; Searcher = None;
+        Indexer = None;
+        Directory = None;
+        Searcher = None;
         Config = Core.defaultConfig;
-        ExtractorAgent = RoutedAgent.create extractAndStoreDocument ConcurrentExtractorsLimit
+        ExtractorAgent = None;
     }

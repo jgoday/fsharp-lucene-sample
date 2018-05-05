@@ -14,6 +14,7 @@ let main argv =
     let config = {
         Core.Config.DocumentsDirectory = dir;
         Core.Config.IndexDirectory = indexDir;
+        Core.Config.ConcurrentExtractors = 5;
     }
 
     Agents.start <| config
