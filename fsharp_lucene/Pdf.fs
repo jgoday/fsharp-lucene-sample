@@ -1,14 +1,15 @@
 namespace DocumentStore
 
 module PDF =
-
-    open iText.Kernel.Pdf
-    open iText.Kernel.Pdf.Canvas.Parser
     open System.Text
     open HeyRed.Mime
+    open iText.Kernel.Pdf
+    open iText.Kernel.Pdf.Canvas.Parser
 
     let isPdf (filepath: string) =
         MimeGuesser.GuessMimeType(filepath) = "application/pdf"
+
+    let (|PDF|_|) (filepath: string) = if isPdf(filepath) then Some filepath else None
 
     let getPdfContent (filepath: string) =
         try

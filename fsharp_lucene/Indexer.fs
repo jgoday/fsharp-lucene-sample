@@ -70,7 +70,8 @@ module Indexer =
                 if not (documentExists ctx filepath) then
                     printfn "Indexer.storeDocument: %A" filename
 
-                    let content = if PDF.isPdf filepath then PDF.getPdfContent(filepath) else ""
+                    let extractor = ExtractorFactory.createExtractor filepath
+                    let content = extractor filepath
 
                     let doc = new Document()
                     doc.Add(new StringField("Path", filepath, Field.Store.YES))
