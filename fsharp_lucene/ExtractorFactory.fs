@@ -8,7 +8,7 @@ module ExtractorFactory =
     open HeyRed.Mime
 
     type Extractor = string -> string
-    
+
     let createExtractor (filepath: string): Extractor =
         printfn "createExtractor: %A" (MimeGuesser.GuessMimeType(filepath))
         match filepath with

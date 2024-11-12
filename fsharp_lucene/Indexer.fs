@@ -77,6 +77,8 @@ module Indexer =
                     doc.Add(new StringField("Path", filepath, Field.Store.YES))
                     doc.Add(new StringField("Name", filename, Field.Store.YES))
                     doc.Add(new TextField("Content", content, Field.Store.YES))
+                    doc.Add(new StringField("Hash", md5 filepath, Field.Store.YES))
+                    doc.Add(new Int64Field("FileSize", fileSize filepath, Field.Store.YES))
 
                     ctx.Indexer |> Option.iter (fun w ->
                         w.AddDocument doc
@@ -100,12 +102,12 @@ module Indexer =
         let analyzer = new StandardAnalyzer(luceneVersion)
         let queryParser = new QueryParser(luceneVersion, "Content", analyzer)
         queryParser.DefaultOperator <- QueryParser.AND_OPERATOR;
-                
+
         let query = queryParser.Parse(term)
         let scorer = new QueryScorer(query, "Content")
 
         let highlighter = new Highlighter(scorer)
-        
+
         ctx.Searcher |>
             Option.iter (fun searcher ->
                 let res = searcher.Search(query, searchMaxDocuments)
@@ -118,10 +120,15 @@ module Indexer =
                                 let fragment = highlighter.GetBestFragment(analyzer,
                                                                            "Content",
                                                                            content)
+                                let md5Sum = doc.GetField("Hash").GetStringValue()
+                                let fileSize = doc.GetField("FileSize").GetInt64Value()
+
                                 printfn "-------------------------------"
                                 printfn "Name: %s" name
                                 printfn "Path: %s" path
+                                printfn "MD5: %s" md5Sum
                                 printfn "%s" fragment
+                                printfn "Size: %i" (if fileSize.HasValue then fileSize.Value else 0)
                                 printfn "-------------------------------")
                             res.ScoreDocs)
 
